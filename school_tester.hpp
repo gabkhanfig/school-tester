@@ -12,6 +12,14 @@
 #include <fstream>
 #include <utility>
 #include <cstdlib>
+#if defined(_MSC_VER) || defined (_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <debugapi.h>
+#elif defined(__APPLE__) || defined (__GNUC__)
+#include <sys/stat.h>
+#include <fcntl.h>
+#endif
 
 namespace st {
     struct TestConfig {
@@ -36,15 +44,20 @@ namespace st {
     namespace detail {
         using TestFunc = void(*)();
 
-        class TestInfo {
-        public:
+        struct TestInfo {
             std::string name;
             TestFunc    func;
         };
+
+        // struct TestContext {
+        //     bool shouldDebugBreak;
+        // };
             
         static void addTest(const char* name, TestFunc f); 
         static bool runTest(const std::string& name, bool catchExceptions);
         static std::vector<std::string> testsToRun(const TestConfig& config);
+        // static TestContext& currentContext();
+        static bool isDebuggerAttached();
     }
 }
 
@@ -58,8 +71,17 @@ static void f()
 
 #define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_FUNC, testName)
 
+#define CHECK(condition) \
+do { \
+    if((condition) == false) { \
+        \
+    }   \
+} while(false)
+
 namespace st {
     TestReport runTests(const TestConfig& config) {
+        // const detail::TestContext oldContext = detail::currentContext();
+
         const auto tests = detail::testsToRun(config);
         for(const std::string& testName : tests) {
             (void)detail::runTest(testName, true);
@@ -123,8 +145,7 @@ namespace st {
                 TestInfo& info = (*found).second;
                 info.func();
                 return true;
-            }
-            
+            } 
         }
 
         static std::vector<std::string> testsToRun(const TestConfig &config)
@@ -155,6 +176,50 @@ namespace st {
             testCases.close();
             return tests;
         }
+
+        static bool isDebuggerAttached()
+        {
+            #if defined(_MSC_VER) || defined (_WIN32)
+            return IsDebuggerPresent();
+            #elif defined(__APPLE__) || defined (__GNUC__)
+            // https://stackoverflow.com/questions/3596781/how-to-detect-if-the-current-process-is-being-run-by-gdb
+            char buf[4096];
+
+            const int status_fd = open("/proc/self/status", O_RDONLY);
+            if (status_fd == -1)
+                return false;
+
+            const ssize_t num_read = read(status_fd, buf, sizeof(buf) - 1);
+            close(status_fd);
+
+            if (num_read <= 0)
+                return false;
+
+            buf[num_read] = '\0';
+            constexpr char tracerPidString[] = "TracerPid:";
+            const auto tracer_pid_ptr = strstr(buf, tracerPidString);
+            if (!tracer_pid_ptr)
+                return false;
+
+            for (const char* characterPtr = tracer_pid_ptr + sizeof(tracerPidString) - 1; characterPtr <= buf + num_read; ++characterPtr)
+            {
+                if (isspace(*characterPtr))
+                    continue;
+                else
+                    return isdigit(*characterPtr) != 0 && *characterPtr != '0';
+            }
+
+            return false;
+            #else
+            #error "Unsupported architecture"
+            #endif
+        }
+
+        // TestContext& currentContext()
+        // {
+        //     static TestContext context;
+        //     return context;
+        // }
     }
 }
 

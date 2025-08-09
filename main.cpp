@@ -11,9 +11,13 @@ TEST_CASE("some other test") {
 
 
 int main() {
-    st::TestConfig defaultConfig{};
-    defaultConfig.useTestFile = true;
-    defaultConfig.testFileName = "../test_cases.txt";
-    (void)st::runTests(defaultConfig);
+    // st::TestConfig defaultConfig{};
+    // defaultConfig.useTestFile = true;
+    // defaultConfig.testFileName = "../test_cases.txt";
+    // (void)st::runTests(defaultConfig);
+
+    bool dbg = st::detail::isDebuggerAttached();
+    std::cout << dbg << std::endl;
+
     return 0;
 }
