@@ -18,24 +18,27 @@ TEST_CASE("some other test") {
     std::cout << "test case!\n";
 }
 
+TEST_CASE("two numbers equal") {
+    std::string str = "hello world";
+    CHECK_GE(str, "wello world");
+}
+
 int main() {
-    // st::TestConfig defaultConfig{};
+    st::TestConfig defaultConfig{};
     // defaultConfig.useTestFile = true;
     // defaultConfig.testFileName = "../test_cases.txt";
-    // (void)st::runTests(defaultConfig);
+    (void)st::runTests(defaultConfig);
 
     bool dbg = st::detail::isDebuggerAttached();
     std::cout << dbg << std::endl;
     
-    bool a = false;
+    int a = 5;
     try {
         //testFunction();
-        CHECK(a);
+        CHECK_GE(a, 6);
     } catch(st::TestException& e) {
         std::cout << e.what() << std::endl;
-        std::cout << "gulp\n";
     }
-    
 
     return 0;
 }

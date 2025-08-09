@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <sstream>
 #if defined(_MSC_VER) || defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -48,21 +49,132 @@ namespace st {
 
     };
 
+    TestReport runTests(const TestConfig& config);
+
     class TestException : public std::exception {
     public:
-        TestException(const char* condition, const char* file, int line);
+
+        TestException(std::string condition, const char* file, int line, const char* extra = "");
 
         virtual const char* what() const noexcept override;
 
+        template<typename Lhs, typename Rhs>
+        static std::string generateComparisonString(const Lhs& lhs, const Rhs& rhs, const char* comparison);
+
+
     private:
         std::string what_;
-        const char* condition_;
+        std::string condition_;
         const char* file_;
         int line_;
     };
+}
 
-    TestReport runTests(const TestConfig& config);
+#define _ST_CONCAT_IMPL(a, b) a##b
+#define _ST_CONCAT(a, b) _ST_CONCAT_IMPL(a, b)
+#define _ST_GENERATE_TEST_FUNC _ST_CONCAT(SCHOOL_TEST_, __COUNTER__)
 
+#define _ST_REGISTER_TEST(f, testName)                      \
+static void f();                                            \
+static const int _ST_CONCAT(_ST_IGNORE_, __COUNTER__)       \
+    = [](){st::detail::addTest(testName, f); return 0; }(); \
+static void f()
+
+#if defined(_MSC_VER) || defined (_WIN32)
+#define _ST_DEBUG_BREAK() DebugBreak()
+#elif defined(__APPLE__) || defined (__GNUC__)
+#define _ST_DEBUG_BREAK() __builtin_trap()
+#endif
+
+#define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_FUNC, testName)
+
+#define CHECK(condition) \
+do { \
+    if((condition) == false) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(#condition, __FILE__, __LINE__, "Expected to be true"); \
+    }   \
+} while(false)
+
+#define CHECK_FALSE(condition) \
+do { \
+    if(condition) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(std::string("!") + #condition, __FILE__, __LINE__, "Expected to be false"); \
+    }   \
+} while(false)
+
+#define CHECK_EQ(lhs, rhs) \
+do { \
+    if((lhs) != (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, "=="), __FILE__, __LINE__, "Expected to be equal"); \
+    }   \
+} while(false)
+
+#define CHECK_NE(lhs, rhs) \
+do { \
+    if((lhs) == (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, "!="), __FILE__, __LINE__, "Expected to be not equal"); \
+    }   \
+} while(false)
+
+#define CHECK_LT(lhs, rhs) \
+do { \
+    if((lhs) >= (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, "<"), __FILE__, __LINE__, "Expected to be less than"); \
+    }   \
+} while(false)
+
+#define CHECK_LE(lhs, rhs) \
+do { \
+    if((lhs) > (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, "<="), __FILE__, __LINE__, "Expected to be less than or equal to"); \
+    }   \
+} while(false)
+
+#define CHECK_GT(lhs, rhs) \
+do { \
+    if((lhs) <= (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, ">"), __FILE__, __LINE__, "Expected to be greater than"); \
+    }   \
+} while(false)
+
+#define CHECK_GE(lhs, rhs) \
+do { \
+    if((lhs) < (rhs)) { \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(    \
+            st::TestException::generateComparisonString(lhs, rhs, ">="), __FILE__, __LINE__, "Expected to be greater than or equal to"); \
+    }   \
+} while(false)
+
+namespace st {
     namespace detail {
         using TestFunc = void(*)();
 
@@ -81,36 +193,8 @@ namespace st {
         static std::vector<std::string> testsToRun(const TestConfig& config);
         static TestContext& currentContext();
         static bool isDebuggerAttached();
-    }
-}
+    } // namespace detail
 
-#define _ST_GENERATE_TEST_FUNC SCHOOL_TEST_##__COUNTER__
-
-#define _ST_REGISTER_TEST(f, testName)                      \
-static void f();                                            \
-static const int _ST_IGNORE_##__COUNTER__                   \
-    = [](){st::detail::addTest(testName, f); return 0; }(); \
-static void f()
-
-#if defined(_MSC_VER) || defined (_WIN32)
-#define _ST_DEBUG_BREAK() DebugBreak()
-#elif defined(__APPLE__) || defined (__GNUC__)
-#define _ST_DEBUG_BREAK() __builtin_trap()
-#endif
-
-#define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_FUNC, testName)
-
-#define CHECK(condition) \
-do { \
-    if((condition) == false) { \
-        if(st::detail::currentContext().shouldDebugBreak) { \
-            _ST_DEBUG_BREAK(); \
-        } \
-        throw st::TestException(#condition, __FILE__, __LINE__); \
-    }   \
-} while(false)
-
-namespace st {
     TestReport runTests(const TestConfig& config) {
         const detail::TestContext oldContext = detail::currentContext();
 
@@ -127,15 +211,23 @@ namespace st {
         return TestReport();
     }
 
-    st::TestException::TestException(const char* condition, const char* file, int line)
-        : condition_(condition), file_(file), line_(line)
+    st::TestException::TestException(std::string condition, const char* file, int line, const char* extra)
+        : condition_(std::move(condition)), file_(file), line_(line)
     {
-        what_ = std::string(file) + ':' + std::to_string(line) + ": ERROR: " + "Check failed [ " + condition + " ]";
+        what_ = std::string(file_) + ':' + std::to_string(line_) + ": ERROR: " + "Check failed [ " + condition_ + " ]. " + extra;
     }
 
     inline const char *TestException::what() const noexcept
     {
         return this->what_.c_str();
+    }
+
+    template <typename Lhs, typename Rhs>
+    inline std::string TestException::generateComparisonString(const Lhs &lhs, const Rhs &rhs, const char *comparison)
+    {
+        std::ostringstream os;
+        os << lhs << ' ' << comparison << ' ' << rhs;
+        return os.str();
     }
 
     namespace detail {   
@@ -298,6 +390,6 @@ namespace st {
             return context;
         }
     }
-}
+} // namespace st
 
 #endif // SCHOOL_TESTER_H_
