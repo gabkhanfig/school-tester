@@ -16,9 +16,13 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <debugapi.h>
-#elif defined(__APPLE__) || defined (__GNUC__)
-#include <sys/stat.h>
-#include <fcntl.h>
+#elif defined(__APPLE__) 
+#include <assert.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/sysctl.h>
+#elif defined (__GNUC__)
+
 #endif
 
 namespace st {
@@ -181,7 +185,26 @@ namespace st {
         {
             #if defined(_MSC_VER) || defined (_WIN32)
             return IsDebuggerPresent();
-            #elif defined(__APPLE__) || defined (__GNUC__)
+            #elif defined(__APPLE__)
+            // https://developer.apple.com/library/archive/qa/qa1361/_index.html
+            int junk;
+            int mib[4];
+            struct kinfo_proc info;
+            size_t size;
+
+            info.kp_proc.p_flag = 0;
+
+            mib[0] = CTL_KERN;
+            mib[1] = KERN_PROC;
+            mib[2] = KERN_PROC_PID;
+            mib[3] = getpid();
+
+            size = sizeof(info);
+            junk = sysctl(mib, sizeof(mib) / sizeof(*mib), &info, &size, NULL, 0);
+            assert(junk == 0);
+
+            return ((info.kp_proc.p_flag & P_TRACED) != 0);
+            #elif defined (__GNUC__)
             // https://stackoverflow.com/questions/3596781/how-to-detect-if-the-current-process-is-being-run-by-gdb
             char buf[4096];
 
