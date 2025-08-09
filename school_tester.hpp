@@ -12,7 +12,6 @@
 #include <fstream>
 #include <utility>
 #include <cstdlib>
-#include <streambuf>
 
 namespace st {
     struct TestConfig {
@@ -49,15 +48,15 @@ namespace st {
     }
 }
 
-#define _ST_GENERATE_TEST_NAME SCHOOL_TEST_##__COUNTER__
+#define _ST_GENERATE_TEST_FUNC SCHOOL_TEST_##__COUNTER__
 
-#define _ST_REGISTER_TEST(f, testName) \
-static void f(); \
-static const int _ST_IGNORE_##__COUNTER__ \
-    = [](){st::detail::addTest(testName, f); return 0; }();\
+#define _ST_REGISTER_TEST(f, testName)                      \
+static void f();                                            \
+static const int _ST_IGNORE_##__COUNTER__                   \
+    = [](){st::detail::addTest(testName, f); return 0; }(); \
 static void f()
 
-#define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_NAME, testName)
+#define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_FUNC, testName)
 
 namespace st {
     TestReport runTests(const TestConfig& config) {
@@ -89,7 +88,6 @@ namespace st {
             TestInfo info{nameStr, f};
             getAllTests().insert({nameStr, std::move(info)});
             getTestOrder().push_back(nameStr);
-            std::cerr << "added test " << name << std::endl;
         }
 
         static bool runTest(const std::string &name, bool catchExceptions)
@@ -138,7 +136,8 @@ namespace st {
             std::ifstream testCases;
             testCases.open(config.testFileName);
             if(!testCases.is_open()) {
-                // todo handle this
+                std::cerr << "FAILED TO OPEN TEST CASES FILE: " << config.testFileName << std::endl;
+                return std::vector<std::string>();
             }
 
             std::vector<std::string> tests;
@@ -148,9 +147,10 @@ namespace st {
                 const auto found = getAllTests().find(line);
                 if(found == getAllTests().end()) {
                     std::cerr << "FAILED TO FIND TEST [" << line << ']' << std::endl;
+                } else {
+                    tests.push_back(line);
                 }
             }
-            std::cout << "-\n";
 
             testCases.close();
             return tests;
