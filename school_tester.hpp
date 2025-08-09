@@ -10,11 +10,22 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <utility>
 #include <cstdlib>
+#include <streambuf>
 
 namespace st {
-    class TestConfig {
+    struct TestConfig {
+        bool useTestFile = false;
+        std::string testFileName;
+    
+        TestConfig() = default;
 
+        /// Initialize configuration to read a specific test file name, reading
+        /// the test(s) to run, and in which order.
+        TestConfig(std::string inTestFileName)
+            : useTestFile(true), testFileName(std::move(inTestFileName))
+        {}
     };
 
     class TestReport {
@@ -32,9 +43,9 @@ namespace st {
             TestFunc    func;
         };
             
-        void addTest(const char* name, TestFunc f); 
-        bool runTest(const std::string& name, bool catchExceptions);
-        bool runAllTests();
+        static void addTest(const char* name, TestFunc f); 
+        static bool runTest(const std::string& name, bool catchExceptions);
+        static std::vector<std::string> testsToRun(const TestConfig& config);
     }
 }
 
@@ -50,8 +61,10 @@ static void f()
 
 namespace st {
     TestReport runTests(const TestConfig& config) {
-        (void)config;
-        detail::runAllTests();
+        const auto tests = detail::testsToRun(config);
+        for(const std::string& testName : tests) {
+            (void)detail::runTest(testName, true);
+        }
         return TestReport();
     }
 
@@ -71,7 +84,7 @@ namespace st {
             return ranTests;
         }
 
-        void addTest(const char* name, TestFunc f) {
+        static void addTest(const char* name, TestFunc f) {
             const std::string nameStr = name;
             TestInfo info{nameStr, f};
             getAllTests().insert({nameStr, std::move(info)});
@@ -79,7 +92,7 @@ namespace st {
             std::cerr << "added test " << name << std::endl;
         }
 
-        bool runTest(const std::string &name, bool catchExceptions)
+        static bool runTest(const std::string &name, bool catchExceptions)
         {
             auto setSuccessStatus = [name](bool success) {
                 auto& ranTests = getRanTests();
@@ -116,16 +129,31 @@ namespace st {
             
         }
 
-        bool runAllTests()
+        static std::vector<std::string> testsToRun(const TestConfig &config)
         {
-            bool success = true;
-            const auto& testOrder = getTestOrder();
-            for(const std::string& testName : testOrder) {
-                if(!runTest(testName, true)) {
-                    success = false;
+            if(!config.useTestFile) {
+                return getTestOrder();
+            }
+
+            std::ifstream testCases;
+            testCases.open(config.testFileName);
+            if(!testCases.is_open()) {
+                // todo handle this
+            }
+
+            std::vector<std::string> tests;
+
+            std::string line;
+            while(std::getline(testCases, line)) { 
+                const auto found = getAllTests().find(line);
+                if(found == getAllTests().end()) {
+                    std::cerr << "FAILED TO FIND TEST [" << line << ']' << std::endl;
                 }
             }
-            return success;
+            std::cout << "-\n";
+
+            testCases.close();
+            return tests;
         }
     }
 }

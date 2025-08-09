@@ -12,6 +12,8 @@ TEST_CASE("some other test") {
 
 int main() {
     st::TestConfig defaultConfig{};
+    defaultConfig.useTestFile = true;
+    defaultConfig.testFileName = "../test_cases.txt";
     (void)st::runTests(defaultConfig);
     return 0;
 }
