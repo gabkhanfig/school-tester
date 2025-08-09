@@ -2,13 +2,21 @@
 #include <iostream>
 
 void testFunction() {
-    throw 0;
+    bool a = false;
+    do { 
+        if((a) == false) { 
+            if(st::detail::currentContext().shouldDebugBreak) { 
+                _ST_DEBUG_BREAK(); 
+            } 
+            throw st::TestException("a", "something", 1);
+        }   
+    } while(false);
+
 }
 
 TEST_CASE("some other test") {
     std::cout << "test case!\n";
 }
-
 
 int main() {
     // st::TestConfig defaultConfig{};
@@ -18,6 +26,16 @@ int main() {
 
     bool dbg = st::detail::isDebuggerAttached();
     std::cout << dbg << std::endl;
+    
+    bool a = false;
+    try {
+        //testFunction();
+        CHECK(a);
+    } catch(st::TestException& e) {
+        std::cout << e.what() << std::endl;
+        std::cout << "gulp\n";
+    }
+    
 
     return 0;
 }

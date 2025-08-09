@@ -12,6 +12,8 @@
 #include <fstream>
 #include <utility>
 #include <cstdlib>
+#include <cstring>
+#include <exception>
 #if defined(_MSC_VER) || defined (_WIN32)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -22,7 +24,10 @@
 #include <unistd.h>
 #include <sys/sysctl.h>
 #elif defined (__GNUC__)
-
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <ctype.h>
 #endif
 
 namespace st {
@@ -43,6 +48,19 @@ namespace st {
 
     };
 
+    class TestException : public std::exception {
+    public:
+        TestException(const char* condition, const char* file, int line);
+
+        virtual const char* what() const noexcept override;
+
+    private:
+        std::string what_;
+        const char* condition_;
+        const char* file_;
+        int line_;
+    };
+
     TestReport runTests(const TestConfig& config);
 
     namespace detail {
@@ -53,14 +71,15 @@ namespace st {
             TestFunc    func;
         };
 
-        // struct TestContext {
-        //     bool shouldDebugBreak;
-        // };
+        struct TestContext {
+            bool shouldDebugBreak = false;
+            const TestInfo* currentTest = nullptr;
+        };
             
         static void addTest(const char* name, TestFunc f); 
         static bool runTest(const std::string& name, bool catchExceptions);
         static std::vector<std::string> testsToRun(const TestConfig& config);
-        // static TestContext& currentContext();
+        static TestContext& currentContext();
         static bool isDebuggerAttached();
     }
 }
@@ -73,24 +92,50 @@ static const int _ST_IGNORE_##__COUNTER__                   \
     = [](){st::detail::addTest(testName, f); return 0; }(); \
 static void f()
 
+#if defined(_MSC_VER) || defined (_WIN32)
+#define _ST_DEBUG_BREAK() DebugBreak()
+#elif defined(__APPLE__) || defined (__GNUC__)
+#define _ST_DEBUG_BREAK() __builtin_trap()
+#endif
+
 #define TEST_CASE(testName) _ST_REGISTER_TEST(_ST_GENERATE_TEST_FUNC, testName)
 
 #define CHECK(condition) \
 do { \
     if((condition) == false) { \
-        \
+        if(st::detail::currentContext().shouldDebugBreak) { \
+            _ST_DEBUG_BREAK(); \
+        } \
+        throw st::TestException(#condition, __FILE__, __LINE__); \
     }   \
 } while(false)
 
 namespace st {
     TestReport runTests(const TestConfig& config) {
-        // const detail::TestContext oldContext = detail::currentContext();
+        const detail::TestContext oldContext = detail::currentContext();
+
+        const bool debuggerAttached = detail::isDebuggerAttached();
+        detail::currentContext().shouldDebugBreak = debuggerAttached;
 
         const auto tests = detail::testsToRun(config);
         for(const std::string& testName : tests) {
             (void)detail::runTest(testName, true);
         }
+
+        detail::currentContext() = oldContext;
+
         return TestReport();
+    }
+
+    st::TestException::TestException(const char* condition, const char* file, int line)
+        : condition_(condition), file_(file), line_(line)
+    {
+        what_ = std::string(file) + ':' + std::to_string(line) + ": ERROR: " + "Check failed [ " + condition + " ]";
+    }
+
+    inline const char *TestException::what() const noexcept
+    {
+        return this->what_.c_str();
     }
 
     namespace detail {   
@@ -137,17 +182,22 @@ namespace st {
             if(catchExceptions) {
                 try {
                     TestInfo& info = (*found).second;
+                    detail::currentContext().currentTest = &info;
                     info.func();
                 } catch(...) {
                     std::cerr << "Caught exception from test [" << name << ']' << std::endl;
+                    detail::currentContext().currentTest = nullptr;
                     return false;
                 }
                 
+                detail::currentContext().currentTest = nullptr;
                 return true;
             } 
             else {
                 TestInfo& info = (*found).second;
+                detail::currentContext().currentTest = &info;
                 info.func();
+                detail::currentContext().currentTest = nullptr;
                 return true;
             } 
         }
@@ -238,11 +288,15 @@ namespace st {
             #endif
         }
 
-        // TestContext& currentContext()
-        // {
-        //     static TestContext context;
-        //     return context;
-        // }
+        TestContext& currentContext()
+        {
+            static TestContext context = [](){
+                TestContext c;
+                c.shouldDebugBreak = isDebuggerAttached();
+                return c;
+            }();
+            return context;
+        }
     }
 }
 
